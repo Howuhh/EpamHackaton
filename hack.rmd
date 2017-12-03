@@ -1,0 +1,219 @@
+---
+title: "stackhackathon"
+author: "Silyutina"
+date: "02 12 2017"
+output: html_document
+---
+
+```{r}
+library(topicmodels)
+```
+
+```{r}
+library(tm)
+library(wordcloud)
+library(RColorBrewer)
+post$x <- tolower(post$x)
+
+coursera_ques_kek.corp <- Corpus(DataframeSource(data.frame(post[, 2])))
+coursera_ques_kek.corp <- tm_map(coursera_ques_kek.corp, removePunctuation)
+tdm <- TermDocumentMatrix(coursera_ques_kek.corp)
+m <- as.matrix(tdm)
+v <- sort(rowSums(m),decreasing=TRUE)
+d <- data.frame(word = names(v),freq=v)
+pal <- brewer.pal(9, "BuPu")
+pal <- pal[-(1:2)]
+#png("wordcloud.png", width=1280,height=800)
+wordcloud(d$word,d$freq, scale=c(8,.3),min.freq=2,max.words=100, random.order=T, rot.per=.15, colors=pal, vfont=c("sans serif","plain"))
+```
+
+
+```{r}
+
+p <- posts2[duplicated(posts2), ]
+p <- as.data.frame(unique(posts2$Body))
+colnames(p)[1] <- "id"
+p$id <- as.character(p$id)
+ps <- semi_join(p, posts2, by="id")
+
+
+library(qdapRegex)
+Posts$Code <- rm_between(Posts$Body, "<code>", "</code>", replacement = " ", extract=FALSE)
+Posts$Code_sep = Posts$Code %>% map_chr( ~ paste(.x, collapse = " "))
+quest <- Posts %>% filter(is.na(ParentId)==T)
+quest$Code <- rm_between(quest$Body, "<code>", "</code>", replacement = "", extract=FALSE)
+quest$Text <- str_replace_all(quest$Body, "<code>.*</code>", " ")
+quest$Text <- str_replace_all(quest$Text, "<p>", " ")
+quest$Text <- str_replace_all(quest$Text, "</p>", " ")
+quest$Text <- str_replace_all(quest$Text, "</pre>", " ")
+quest$Text <- str_replace_all(quest$Text, "<pre>", " ")
+quest$Text <- str_replace_all(quest$Text, "<strong>", " ")
+quest$Text <- str_replace_all(quest$Text, "</strong>", " ")
+quest$Text <- str_replace_all(quest$Text, "</em>", " ")
+quest$Text <- str_replace_all(quest$Text, "<em>", " ")
+
+
+quest$Text <- str_replace_all(quest$Text, "\\s+", " ")
+quest$Text <- str_replace_all(quest$Text, "<code>.*</code>", " ")
+quest$Text <- str_replace_all(quest$Text, "<sup>", " ")
+quest$Text <- str_replace_all(quest$Text, "</sup>", " ")
+quest$Text <- str_replace_all(quest$Text, "</sup>", " ")
+quest$Text <- str_replace_all(quest$Text, "<a>.*</a>", " ")
+quest$Text <- str_replace_all(quest$Text, "<a.*</a>", " ")
+quest$Text <- str_replace_all(quest$Text, "<blockquote>", " ")
+quest$Text <- str_replace_all(quest$Text, "</blockquote>", " ")
+quest$Text <- str_replace_all(quest$Text, ":before", " ")
+quest$Text <- str_replace_all(quest$Text, ":after", " ")
+quest$Text <- str_replace_all(quest$Text, ":exception", " ")
+quest$Text <- str_replace_all(quest$Text, "'\\w", " ")
+quest$Text <- str_replace_all(quest$Text, "[^\\w\\s-]", " ")
+quest$Text <- str_replace_all(quest$Text, "\\d+", " ")
+quest$Text <- str_replace_all(quest$Text, "\\+", " ")
+quest$Text <- str_replace_all(quest$Text, "\\=", " ")
+
+quest$Text <- str_replace_all(quest$Text, "\\s+", " ")
+
+
+tidy_quest <- quest %>% select(Id, Text)
+tidy_quest$Text <- tolower(as.character(tidy_quest$Text))
+library()
+tidy_quest$Text = lapply(tidy_quest$Text, text_tokens(stemmer = "en")) # english stemmer
+write.csv(tidy_quest, file="~/tidy_quest.csv", row.names = F)
+
+stop_words = read.table("~/stopwords_ru.txt")
+stop_words$V1 = stop_words$V1 %>% as.character() %>% str_trim()
+names(stop_words)[1] = "word"
+data("stop_words")
+
+qa_tidy <- qa_tidy %>%
+  unnest_tokens(word, questions)
+#Убираем стоп слова
+qa_tidy <- qa_tidy %>% anti_join(stop_words, by = "word")
+
+library(plyr)
+qa_merged <- ddply(qa_tidy, .(docs), summarize, questions=paste(word, collapse=" "))
+```
+
+```{r}
+
+#Начинаем работать с текстом: удаляем цифры, пунктуацию, разбиваем на слова, удаляем стоп-слова, считаем частоты слов в тексте.
+Code <- as.data.frame(as.character(quest$Code_sep))
+colnames(Code)[1] <- "Code_sep"
+Code <- Code %>% filter(Code_sep != "NA")
+Code$Code_sep <- as.character(Code$Code_sep)
+
+docs = corpus(Code$Code_sep)
+
+textdfm = quanteda::dfm(docs, what="word",
+              tolower = TRUE, 
+              removeNumbers = FALSE, removePunct = FALSE,
+              remove = c(stopwords(kind = "en"))) 
+
+
+# textdfm = quanteda::dfm(docs, what="word",
+#               toLower = TRUE, 
+#               removeNumbers = TRUE, removePunct = TRUE,
+#               ignoredFeatures = c(stopwords(kind = "english"), "film", "movie"))
+
+dfmforTopics = convert(textdfm, to = "topicmodels")
+
+questions <- quest %>% select(Body)
+write.csv(questions, file="~/quest.csv", row.names = F)
+```
+
+```{r}
+library(topicmodels)
+review2_lda <- LDA(dfmforTopics, k = 10, control = list(seed = 12345))
+```
+
+```{r}
+lang <- c("JavaScript", "SQL", "Java", "C#", "Python", "PHP", "C++", "C", "TypeScript", "Ruby", "Swift", "Objective-C", "VB.NET", "Assembly", "R", "Perl", "VBA", "Matlab", "Go", "Scala", "Groovy", "CoffeeScript", "Visual Basic 6", "Lua", "Haskell")
+lang <- tolower(lang) 
+library(stringr)
+Posts$language <- str_extract_all()
+quest$language <- str_replace_all(quest$Tags, "<", " ")
+quest$language <- str_replace_all(quest$language, ">", " ")
+library(dplyr)
+tags <- quest %>% select(ParentId, language)
+tags <- str_split_fixed(tags$language, " ", 10)
+
+
+```
+
+
+
+
+```{r, echo=F, message=FALSE, warning=FALSE}
+#Начинаем работать с текстом: удаляем цифры, пунктуацию, разбиваем на слова, удаляем стоп-слова, считаем частоты слов в тексте.
+coursera_union$Text <- as.character(coursera_union$Text)
+docs = corpus(coursera_union$Text)
+
+textdfm = quanteda::dfm(docs, what="word")
+
+
+# textdfm = quanteda::dfm(docs, what="word",
+#               toLower = TRUE, 
+#               removeNumbers = TRUE, removePunct = TRUE,
+#               ignoredFeatures = c(stopwords(kind = "english"), "film", "movie"))
+
+dfmforTopics = convert(textdfm, to = "topicmodels")
+
+
+init$Extract(string = word, sequence_strings = choices, processor = PROC, scorer = SCOR)
+
+```
+
+Построим модель с 30 темами. 
+
+```{r, echo=F, message = FALSE}
+library(topicmodels)
+review_lda <- LDA(dfmforTopics, k = 30, control = list(seed = 12345))
+review_lda
+save(review2_lda, file="~/lda_model_jail.rda")
+load("/students/oyasilyutina/lda_model_jail.rda")
+```
+
+Посмотрим на 20 популярных слов в каждой теме. По ним и определяем название топиков. А также, посмотрим, как темы распределяются по отзывам. 
+
+```{r, echo=F, message = FALSE}
+topics <- tidy(review2_lda, matrix = "beta")
+```
+
+```{r, echo=F, message = FALSE}
+top_terms <- topics %>%
+  group_by(topic) %>%
+  top_n(100, beta) %>%
+  ungroup() %>%
+  arrange(topic, -beta)
+```
+
+```{r}
+gammaDF <- as.data.frame(review2_lda@gamma) 
+names(gammaDF) <- c(1:20)
+#gammaDF <- gammaDF[,-1]
+
+toptopics <- as.data.frame(cbind(document = row.names(gammaDF), 
+  topic = apply(gammaDF,1,function(x) names(gammaDF)[which(x==max(x))])))
+
+toptopics$topic <- as.numeric(as.character(toptopics$topic))
+coursera_union <- bind_cols(coursera_union, toptopics)
+coursera_topics <- coursera_union %>% select(-document)
+write.csv(coursera_topics, file="~/coursera_topics.csv", row.names=F)
+
+
+```
+
+```{r}
+(table(toptopics$topic))
+```
+
+
+```{r}
+qst <- coursera_ques_labels %>% select(Text, index, topic) %>% filter(topic == "-1")
+qst <- qst %>% select(-topic)
+crs <- coursera_ques_labels %>% select(Text, index, topic) %>% filter(topic != "-1") 
+crs <- crs %>% select(-index)
+colnames(crs)[2] <- "index"
+df_for_knn <- rbind(crs, qst)
+write.csv(df_for_knn, file="~/df_for_knn.csv", row.names = F)
+```

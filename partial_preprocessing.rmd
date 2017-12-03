@@ -1,0 +1,142 @@
+```{r}
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+```
+
+```{r}
+# preprocessing
+
+posts_clean = posts_df
+posts_clean = posts_clean %>% 
+  filter(is.na(ParentId == TRUE))
+
+posts_clean$CreationDate = as.character(posts_clean$CreationDate)
+out = list(str_split_fixed(posts_clean$CreationDate, "T", 2))
+two_cols_date = data.frame(posts_clean$CreationDate, do.call(rbind, out))
+posts_clean$OpenDate = two_cols_date$X1
+posts_clean$OpenTime = two_cols_date$X2
+
+posts_clean$OpenDate = as.Date(posts_clean$OpenDate)
+posts_date = posts_clean %>% 
+  dplyr::select(OpenDate) %>% 
+  arrange(desc(OpenDate)) %>% 
+  top_n(10)
+
+str(posts_clean)
+
+posts_clean[is.na(posts_clean$AnswerCount)] = 0
+posts_clean[is.na(posts_clean$CommentCount)] = 0
+posts_clean[is.na(posts_clean$FavoriteCount)] = 0
+posts_clean[is.na(posts_clean$Score)] = 0
+posts_clean[is.na(posts_clean$ViewCount)] = 0
+```
+
+```{r}
+ggplot() +
+  geom_histogram(data=posts_df, aes(x=AnswerCount)) 
+```
+
+```{r}
+summary(posts_df)
+class()
+sum(posts_df$AnswerCount == 1)
+median(posts_df$AnswerCount)
+```
+
+
+```{r}
+ggplot() +
+  geom_histogram(data=posts_df, aes(x=CommentCount))
+```
+
+```{r}
+ggplot() +
+  geom_histogram(data=posts_df, aes(x=FavoriteCount))
+```
+
+```{r}
+ggplot() +
+  geom_histogram(data=posts_df, aes(x=Score))
+```
+
+```{r}
+posts_clean$Tags = str_replace_all(posts_clean$Tags, "<", " ")
+posts_clean$Tags = str_replace_all(posts_clean$Tags, ">", " ")
+
+tag_quest_matrix = tags_df %>% 
+  dplyr::select(TagName) 
+
+
+tag_quest_matrix = as.data.frame(matrix(0, ncol = 50001, nrow = 289122))
+tag_quest_matrix = tags_df %>% 
+  dplyr::select(TagName) 
+tag_quest_matrix = as.data.frame(t(tag_quest_matrix))
+tag_quest_matrix$Id = posts_clean$Id
+
+```
+```{r}
+posts_clean = posts_clean %>% 
+  dplyr::select(-Close)
+write.csv(posts_clean, "posts_clean.csv")
+```
+
+
+# preproc for label propagation 
+```{r}
+coursera_ques = read.csv("~/coursera_ques.csv")
+```
+```{r}
+library(stringr)
+quest = coursera_ques[str_length(as.character(coursera_ques$index)) == 8,]
+quest$Labels = as.character(rep('-1', nrow(quest)))
+
+courses = coursera_ques[str_length(as.character(coursera_ques$index)) > 10,]
+courses$Labels = as.character(1:533)
+coursera_ques_kek = full_join(courses, quest, by=c('Labels', 'index', 'Text'))
+coursera_ques_kek$topic = ifelse(is.na(coursera_ques_kek$topic) == TRUE, -1, coursera_ques_kek$topic)
+coursera_ques_kek 
+
+write.csv(coursera_ques_kek, "coursera_ques_labels.csv")
+
+```
+
+```{r}
+coursera_20 = read.csv("~/coursera_topics.csv")
+coursera_ques_kek = left_join(coursera_ques_kek, coursera_20, by='index')
+coursera_ques_kek$Text.y == NULL
+coursera_ques_kek = rename(coursera_ques_kek,'Text'=Text.x)
+```
+
+
+##вордклауд
+```{r}
+library(tm)
+library(SnowballC)
+library(wordcloud)
+coursera_ques_kek = coursera_ques_kek %>% 
+  filter(index == "https://www.coursera.org/learn/python-representation") %>% 
+  dplyr::select(Text, index, topic)
+TDM <- TermDocumentMatrix(as.character(coursera_ques_kek$Text))
+TDM <- as.matrix(TDM)
+set.seed(100)
+comparison.cloud(TDM, title.size = 1, max.words = 100, random.order = T)
+```
+```{r}
+library(tm)
+library(wordcloud)
+library(RColorBrewer)
+
+coursera_ques_kek.corp <- Corpus(DataframeSource(data.frame(coursera_ques_kek[, 1])))
+coursera_ques_kek.corp <- tm_map(coursera_ques_kek.corp, removePunctuation)
+tdm <- TermDocumentMatrix(coursera_ques_kek.corp)
+m <- as.matrix(tdm)
+v <- sort(rowSums(m),decreasing=TRUE)
+d <- data.frame(word = names(v),freq=v)
+pal <- brewer.pal(9, "BuGn")
+pal <- pal[-(1:2)]
+
+wordcloud(d$word,d$freq, scale=c(8,.3),min.freq=2,max.words=100, random.order=T, rot.per=.15, colors=pal, vfont=c("sans serif","plain"))
+```
+
+
